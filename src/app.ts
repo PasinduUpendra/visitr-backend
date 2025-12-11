@@ -10,14 +10,16 @@ app.use(cors());
 app.use(express.json());
 app.use(requestLogger);
 
-app.get("/health", (_req, res) => {
+// Support both direct local paths (/health, /check) and Vercel-forwarded
+// paths that may include /api/ prefix (/api/health, /api/check).
+app.get(["/health", "/api/health"], (_req, res) => {
   res.json({
     status: "ok",
     env: env.NODE_ENV
   });
 });
 
-app.get("/check", (_req, res) => {
+app.get(["/check", "/api/check"], (_req, res) => {
   res.json({
     ok: true,
     timestamp: new Date().toISOString()

@@ -8,8 +8,8 @@ import { app } from "../src/app";
 // Wrap the Express app in a serverless handler.
 const expressHandler = serverless(app);
 
-// Vercel will pass any /api/* request here (that doesn't match a more
-// specific file like api/hello.ts). We simply delegate to the Express handler.
-export default function handler(req: any, res: any): void {
-  expressHandler(req, res);
+// Vercel passes any /api/* request here (except more specific routes like api/hello.ts).
+// We await the handler so Vercel knows when to finish the request.
+export default async function handler(req: any, res: any): Promise<void> {
+  await expressHandler(req, res);
 }
