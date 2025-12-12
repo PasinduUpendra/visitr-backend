@@ -3,6 +3,7 @@
 import { AiClient } from "../../src/services/AiClient";
 import { VisaEvaluationInput } from "../../src/types/visa";
 import { z } from "zod";
+import { randomUUID } from "crypto";
 
 const schema = z.object({
   nationality: z.string().min(2),
@@ -28,7 +29,15 @@ export default async function handler(req: any, res: any) {
     const input = parse.data as VisaEvaluationInput;
     const result = await ai.evaluateVisa(input);
 
-    return res.status(200).json(result);
+    const caseId = randomUUID();
+
+    return res.status(200).json({
+      caseId,
+      summary: result.summary,
+      recommendedRoute: result.recommendedRoute,
+      caveats: result.caveats
+      // rawModelResponse intentionally omitted from public API response for now
+    });
   } catch (err: any) {
     return res.status(500).json({ error: err?.message || "Internal error" });
   }
