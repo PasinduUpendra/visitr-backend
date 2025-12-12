@@ -17,47 +17,59 @@ export class AiClient {
     this.model = env.OPENAI_MODEL;
   }
 
+  // Main entry point: evaluate a visa scenario and return structured result.
   async evaluateVisa(input: VisaEvaluationInput): Promise<VisaEvaluationResult> {
     const prompt = this.buildPrompt(input);
 
-    const response = await this.client.responses.create({
+    const completion = await this.client.chat.completions.create({
       model: this.model,
-      input: prompt
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are an expert travel visa assistant. Analyze user situations conservatively. Do not promise approval."
+        },
+        { role: "user", content: prompt }
+      ]
     });
 
-    const content = response.output[0].content
-      .map((block: any) => (block.text ? block.text : ""))
-      .join("\n");
+    const text = completion.choices[0]?.message?.content ?? "";
 
-    return this.parseResponse(content);
+    return this.parseResponse(text);
   }
 
   private buildPrompt(input: VisaEvaluationInput): string {
-    return `You are an expert travel visa assistant. Analyze the user's situation and respond in three sections:
+    return `Analyze this visa situation and answer in the following format with clear section headers:
 
-1) SUMMARY
-2) RECOMMENDED_ROUTE
-3) CAVEATS
+SUMMARY:
+...short summary...
 
-User:
-Nationality: ${input.nationality}
-Destination: ${input.destinationCountry}
-Purpose: ${input.travelPurpose}
-Start: ${input.plannedStartDate ?? "unknown"}
-End: ${input.plannedEndDate ?? "unknown"}
-Context: ${input.additionalContext ?? "none"}
+RECOMMENDED_ROUTE:
+...short description of the most realistic visa path...
 
-Keep answers concise and realistic.`;
+CAVEATS:
+- bullet 1
+- bullet 2
+- bullet 3
+
+User situation:
+- Nationality: ${input.nationality}
+- Destination country: ${input.destinationCountry}
+- Travel purpose: ${input.travelPurpose}
+- Planned start date: ${input.plannedStartDate ?? "unknown"}
+- Planned end date: ${input.plannedEndDate ?? "unknown"}
+- Additional context: ${input.additionalContext ?? "none"}
+`;
   }
 
   private parseResponse(text: string): VisaEvaluationResult {
-    const summary = this.extract("SUMMARY", text);
-    const recommendedRoute = this.extract("RECOMMENDED_ROUTE", text);
-    const caveatsRaw = this.extract("CAVEATS", text);
+    const summary = this.extractSection("SUMMARY", text);
+    const recommendedRoute = this.extractSection("RECOMMENDED_ROUTE", text);
+    const caveatsRaw = this.extractSection("CAVEATS", text);
 
     const caveats = caveatsRaw
       .split("\n")
-      .map((l) => l.replace(/^[-•]\s*/, "").trim())
+      .map((line) => line.replace(/^[-•]\s*/, "").trim())
       .filter(Boolean);
 
     return {
@@ -68,9 +80,12 @@ Keep answers concise and realistic.`;
     };
   }
 
-  private extract(section: string, text: string): string {
-    const regex = new RegExp(section + ":([\\s\\S]*?)(\\n[A-Z_]+:|$)");
+  private extractSection(section: string, text: string): string {
+    const regex = new RegExp(section + ":([\\n\\r]+([\\s\\S]*?))(\\n[A-Z_]+:|$)");
     const match = text.match(regex);
-    return match ? match[1].trim() : "";
+    if (!match) return "";
+
+    // match[1] contains everything after the section header up to the next header
+    return match[1].trim();
   }
 }
