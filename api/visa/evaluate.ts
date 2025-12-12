@@ -5,10 +5,20 @@ import { VisaEvaluationInput } from "../../src/types/visa";
 import { z } from "zod";
 import { randomUUID } from "crypto";
 
+const travelPurposeEnum = z.enum([
+  "tourism",
+  "family_visit",
+  "business",
+  "study",
+  "work",
+  "transit",
+  "other"
+]);
+
 const schema = z.object({
   nationality: z.string().min(2),
   destinationCountry: z.string().min(2),
-  travelPurpose: z.string().min(2),
+  travelPurpose: travelPurposeEnum,
   plannedStartDate: z.string().optional(),
   plannedEndDate: z.string().optional(),
   additionalContext: z.string().optional()
