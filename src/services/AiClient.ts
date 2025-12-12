@@ -17,7 +17,6 @@ export class AiClient {
     this.model = env.OPENAI_MODEL;
   }
 
-  // Main entry point: evaluate a visa scenario and return structured result.
   async evaluateVisa(input: VisaEvaluationInput): Promise<VisaEvaluationResult> {
     const prompt = this.buildPrompt(input);
 
@@ -27,7 +26,7 @@ export class AiClient {
         {
           role: "system",
           content:
-            "You are an expert travel visa assistant. Analyze user situations conservatively. Do not promise approval."
+            "You are an expert travel visa assistant. Analyze user situations conservatively and never promise approval."
         },
         { role: "user", content: prompt }
       ]
@@ -39,18 +38,18 @@ export class AiClient {
   }
 
   private buildPrompt(input: VisaEvaluationInput): string {
-    return `Analyze this visa situation and answer in the following format with clear section headers:
+    return `Analyze this visa situation and answer in the following format, using these exact section headers in uppercase:
 
 SUMMARY:
-...short summary...
+<2-4 sentences>
 
 RECOMMENDED_ROUTE:
-...short description of the most realistic visa path...
+<2-4 sentences explaining the most realistic visa path>
 
 CAVEATS:
-- bullet 1
-- bullet 2
-- bullet 3
+- <bullet 1>
+- <bullet 2>
+- <bullet 3>
 
 User situation:
 - Nationality: ${input.nationality}
@@ -63,9 +62,9 @@ User situation:
   }
 
   private parseResponse(text: string): VisaEvaluationResult {
-    const summary = this.extractSection("SUMMARY", text);
-    const recommendedRoute = this.extractSection("RECOMMENDED_ROUTE", text);
-    const caveatsRaw = this.extractSection("CAVEATS", text);
+    const summary = this.extractSection(text, "SUMMARY");
+    const recommendedRoute = this.extractSection(text, "RECOMMENDED_ROUTE");
+    const caveatsRaw = this.extractSection(text, "CAVEATS");
 
     const caveats = caveatsRaw
       .split("\n")
@@ -80,12 +79,25 @@ User situation:
     };
   }
 
-  private extractSection(section: string, text: string): string {
-    const regex = new RegExp(section + ":([\\n\\r]+([\\s\\S]*?))(\\n[A-Z_]+:|$)");
-    const match = text.match(regex);
-    if (!match) return "";
+  // Very simple parser: split on section headers and pick the block until the next header.
+  private extractSection(text: string, section: "SUMMARY" | "RECOMMENDED_ROUTE" | "CAVEATS"): string {
+    const header = section + ":";
+    const idx = text.indexOf(header);
+    if (idx === -1) return "";
 
-    // match[1] contains everything after the section header up to the next header
-    return match[1].trim();
+    const rest = text.slice(idx + header.length);
+
+    // Find the next section header (one of the others) if it exists.
+    const otherHeaders = ["SUMMARY:", "RECOMMENDED_ROUTE:", "CAVEATS:"].filter((h) => h !== header);
+    const nextIndex = otherHeaders
+      .map((h) => {
+        const i = rest.indexOf(h);
+        return i === -1 ? Infinity : i;
+      })
+      .reduce((min, curr) => (curr < min ? curr : min), Infinity);
+
+    const sectionText = nextIndex === Infinity ? rest : rest.slice(0, nextIndex);
+
+    return sectionText.trim();
   }
 }
