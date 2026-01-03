@@ -9,6 +9,14 @@ export type TravelPurpose =
   | "transit"
   | "other";
 
+export type VisaVerdict = "VISA_FREE" | "VISA_REQUIRED" | "CHECK_NEEDED";
+
+export interface VisaStats {
+  maxStayDays?: number;
+  feeEstimate?: string;
+  processingTimeEstimate?: string;
+}
+
 export interface VisaEvaluationInput {
   nationality: string;
   destinationCountry: string;
@@ -22,5 +30,7 @@ export interface VisaEvaluationResult {
   summary: string;
   recommendedRoute: string;
   caveats: string[];
+  verdict?: VisaVerdict;
+  stats?: VisaStats;
   rawModelResponse?: string;
 }

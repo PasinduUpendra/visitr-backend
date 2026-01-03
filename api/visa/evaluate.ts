@@ -2,6 +2,7 @@
 
 import { AiClient } from "../../src/services/AiClient";
 import { VisaEvaluationInput } from "../../src/types/visa";
+import { validateEvaluationResult } from "../../src/utils/responseValidator";
 import { z } from "zod";
 import { randomUUID } from "crypto";
 
@@ -38,14 +39,20 @@ export default async function handler(req: any, res: any) {
     const ai = new AiClient();
     const input = parse.data as VisaEvaluationInput;
     const result = await ai.evaluateVisa(input);
+// Validate and sanitize the AI response before returning
+    // This prevents breaking the frontend if AI output is malformed
+    const validated = validateEvaluationResult(result);
 
     const caseId = randomUUID();
 
     return res.status(200).json({
       caseId,
-      summary: result.summary,
-      recommendedRoute: result.recommendedRoute,
-      caveats: result.caveats
+      summary: validated.summary,
+      recommendedRoute: validated.recommendedRoute,
+      caveats: validated.caveats,
+      verdict: validated.verdict,
+      stats: validatedlt.verdict,
+      stats: result.stats
       // rawModelResponse intentionally omitted from public API response for now
     });
   } catch (err: any) {
