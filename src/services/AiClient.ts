@@ -36,7 +36,10 @@ export class AiClient {
 
     const text = completion.choices[0]?.message?.content ?? "";
 
-    return this.parseResponse(text);
+    // Create cache key for diagnostics
+    const cacheKey = `${input.nationality}:${input.destinationCountry}:${input.travelPurpose}`;
+
+    return this.parseResponse(text, cacheKey);
   }
 
   private buildPrompt(input: VisaEvaluationInput): string {
@@ -75,7 +78,11 @@ User situation:
 Respond with JSON only:`;
   }
 
-  private parseResponse(text: string): VisaEvaluationResult {
+  private parseResponse(text: string, cacheKey?: string): VisaEvaluationResult {
+    const isDev = process.env.NODE_ENV !== "production";
+    let parseSuccess = false;
+    let failureReason = "";
+
     // Try to parse as JSON
     try {
       // Clean up potential markdown code blocks or extra whitespace
@@ -91,6 +98,17 @@ Respond with JSON only:`;
       cleanedText = cleanedText.trim();
 
       const parsed = JSON.parse(cleanedText);
+
+      // Validate required fields
+      if (typeof parsed.summary !== "string") {
+        failureReason = "missing or invalid summary field";
+      } else if (typeof parsed.recommendedRoute !== "string") {
+        failureReason = "missing or invalid recommendedRoute field";
+      } else if (!Array.isArray(parsed.caveats)) {
+        failureReason = "caveats is not an array";
+      } else if (typeof parsed.verdict !== "string") {
+        failureReason = "missing or invalid verdict field";
+      }
 
       // Extract fields with defaults
       const summary = typeof parsed.summary === "string" 
@@ -117,6 +135,8 @@ Respond with JSON only:`;
         
         if (typeof parsed.stats.maxStayDays === "number" && Number.isFinite(parsed.stats.maxStayDays)) {
           validStats.maxStayDays = Math.floor(parsed.stats.maxStayDays);
+        } else if (parsed.stats.maxStayDays !== undefined) {
+          if (isDev) failureReason = failureReason || "stats.maxStayDays contains invalid number";
         }
         
         if (typeof parsed.stats.feeEstimate === "string" && parsed.stats.feeEstimate.trim().length > 0) {
@@ -133,7 +153,14 @@ Respond with JSON only:`;
         }
       }
 
-      return {
+      parseSuccess = !failureReason;
+
+      // Dev-only diagnostics
+      if (isDev && cacheKey) {
+        console.log(`[AI Parse Diagnostics] cacheKey="${cacheKey}", parseSuccess=${parseSuccess}, verdict="${verdict}"${failureReason ? `, issue="${failureReason}"` : ""}`);
+      }
+
+      const result = {
         summary,
         recommendedRoute,
         caveats,
@@ -141,10 +168,23 @@ Respond with JSON only:`;
         stats,
         rawModelResponse: text
       };
+
+      return result;
     } catch (error) {
       // JSON parsing failed - return safe defaults
-      console.error("Failed to parse AI response as JSON:", error);
+      parseSuccess = false;
       
+      if (isDev) {
+        failureReason = error instanceof SyntaxError ? "invalid json" : "parse exception";
+        console.error(`[AI Parse Error] cacheKey="${cacheKey}", reason="${failureReason}"`, error);
+      } else {
+        console.error("AI response parse failed");
+      }
+      
+      if (isDev && cacheKey) {
+        console.log(`[AI Parse Diagnostics] cacheKey="${cacheKey}", parseSuccess=false, verdict="CHECK_NEEDED", reason="${failureReason}"`);
+      }
+
       return {
         summary: "Unable to determine visa requirements. Please verify with official sources.",
         recommendedRoute: "Check the official embassy or immigration guidance for your specific situation.",
@@ -160,3 +200,4 @@ Respond with JSON only:`;
     }
   }
 }
+
